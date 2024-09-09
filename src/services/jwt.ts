@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 import { ObjectId } from 'mongodb';
 import { StatusCode } from '../interfaces/enum'
 import { DecodedToken } from '../interfaces/interface';
-
+import redisClient from './redis';
 const JWT_SECRET_KEY: string = process.env.JWT_SECRET_KEY || 'Rashid';
 
 export default class JwtControllers {
@@ -24,25 +24,37 @@ export default class JwtControllers {
             throw new Error('Failed to create token');
         }
     }
-    isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
+    isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
         try {
             const token = req.headers.authorization?.split(' ')[1];
-            console.log(token,"Token validating...");
+            console.log(token, "Token validating...");
+    
             if (!token) {
                 return res.status(401).json({ message: "Token is missing" });
             }
     
+            // Check if token is blacklisted
+            const isBlacklisted = await this.isTokenBlacklisted(token);
+            if (isBlacklisted) {
+                return res.status(StatusCode.Unauthorized).json({ message: "Token is blacklisted" });
+            }
+    
+            // Verify token
             const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY || "Rashid") as DecodedToken;
-            console.log(decoded,"ithu decoded");
-            
-            req.userId = decoded?.id;
+            console.log(decoded, "Decoded token");
+    
             if (!decoded) {
                 return res.status(StatusCode.Unauthorized).json({ message: 'Invalid token' });
-            }    
+            }
+    
+            // Attach userId to request object for future use
+            req.userId = decoded.id;
+    
+            // Proceed to next middleware or controller
             next();
         } catch (e) {
             console.error(e);
-            res.status(StatusCode.Unauthorized).json({ message: "token authentication failed" });
+            return res.status(StatusCode.Unauthorized).json({ message: "Token authentication failed" });
         }
     };
     refreshToken = async (req: Request, res: Response, next: NextFunction) => {
@@ -74,31 +86,35 @@ export default class JwtControllers {
         }
     };
 
-    socketRefresh = async (refreshtoken: string): Promise<{ accessToken: string; refreshToken: string } | null> => {
+
+    public async logout(req: Request, res: Response): Promise<Response> {
         try {
-            // Verify the refresh token
-            const decoded = jwt.verify(refreshtoken, process.env.JWT_REFRESH_SECRET_KEY || 'rashi123') as DecodedToken;
-            if (!decoded) {
-                throw new Error('Invalid refresh token');
+            const token = req.headers.authorization?.split(' ')[1]; // Extract the JWT token
+            if (!token) {
+                return res.status(StatusCode.BadRequest).json({ message: 'Token not provided' });
             }
-    
-            console.log('Token refreshed');
-    
-            // Generate new tokens
-            const newRefreshToken = jwt.sign({ id: decoded.userId }, process.env.JWT_REFRESH_SECRET_KEY || 'rashi123', {
-                expiresIn: '7d',
-            });
-    
-            const newAccessToken = jwt.sign({ id: decoded.userId }, process.env.JWT_SECRET_KEY || 'Rashid', {
-                expiresIn: '15m',
-            });
-    
-            return { accessToken: newAccessToken, refreshToken: newRefreshToken };
-        } catch (e) {
-            console.error(e);
-            return null;
+
+            // Add the token to the Redis blacklist
+            const tokenExpireTime = 3600; // Set TTL (should match JWT expiration)
+            await redisClient.setEx(token, tokenExpireTime, 'blacklisted');
+
+            return res.status(StatusCode.OK).json({ message: 'Logged out successfully' });
+        } catch (error) {
+            console.error('Error logging out:', error);
+            return res.status(StatusCode.InternalServerError).json({ error: 'Error logging out' });
         }
-    };
+    }
+
+    async isTokenBlacklisted(token: string): Promise<boolean | null> {
+        try {
+            const result = await redisClient.get(token);
+            return result === 'blacklisted';
+            
+        } catch (error) {
+          console.log(error);
+          return null
+        }
+    }
     
     
 }

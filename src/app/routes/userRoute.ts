@@ -12,9 +12,11 @@ const authController = new AuthControllers();
 userRoute.post('/register', authController.register);
 userRoute.post('/verifyOtp', authController.verifyOtp);
 userRoute.post('/login', authController.login);
+userRoute.get('/getUser/:email',jwtController.isAuthenticated, authController.getUserByEmail);
 
 
 userRoute.get('/refresh',jwtController.refreshToken);
+userRoute.post('/logout', jwtController.isAuthenticated, jwtController.logout);
 
 
 export default userRoute;

@@ -49,3 +49,5 @@ export const getUserData= async(email: string): Promise<UserInterface | null> =>
         return null;
     }
 }
+
+export default client

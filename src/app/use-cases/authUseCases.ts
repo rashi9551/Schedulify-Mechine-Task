@@ -88,4 +88,13 @@ export default class AuthUseCases implements IUseCaseInterface{
             return { status: StatusCode.InternalServerError as number, message: "Internal Server Error" };
         }
     }
+
+    getUserByEmail=async(email: string) =>{
+        try {
+            const user = await userRepo.findUser(email);
+            return user;
+        } catch (error) {
+            throw new Error('Error retrieving user by email');
+        }
+    }
 }

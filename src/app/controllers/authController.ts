@@ -42,4 +42,27 @@ export default class AuthControllers{
         }
     }
 
+    public async getUserByEmail(req: Request, res: Response): Promise<Response> {
+        try {
+            const { email } = req.params;
+
+            // Validate email presence
+            if (!email) {
+                return res.status(StatusCode.BadRequest).json({ error: 'Email is required' });
+            }
+
+            const user = await authUseCases.getUserByEmail(email);
+
+            // Check if user was found
+            if (!user) {
+                return res.status(StatusCode.NotFound).json({ message: 'User not found' });
+            }
+
+            return res.status(StatusCode.OK).json(user);
+        } catch (error) {
+            console.error('Error fetching user by email:', error);
+            return res.status(StatusCode.InternalServerError).json({ error: 'Error fetching user' });
+        }
+    }
+
 }
